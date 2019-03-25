@@ -349,9 +349,9 @@ def current_probability(C, protocol, prepare_case = 'tetr', measure_case = 'tetr
 
     # Check conditions
     assert(prepare_case == 'tetr' or prepare_case == 'axis'),\
-        "Wrong value of prepare_case. Use 'tetr' or 'axis' intead"
+        "Wrong value of prepare_case. Use 'tetr' or 'axis' instead"
     assert(measure_case == 'tetr' or measure_case == 'axis'),\
-        "Wrong value of measure_case. Use 'tetr' or 'axis' intead"
+        "Wrong value of measure_case. Use 'tetr' or 'axis' instead"
 
     # A = protocol_QPT(prepare_case=prepare_case, measure_case=measure_case)
 
@@ -403,22 +403,37 @@ def gradient(C, protocol, frequencies, current_prob, prepare_case = 'tetr', meas
     return grad.reshape(4,4)
 
 
-def grad_descent(frequencies, protocol, prepare_case = 'tetr', measure_case = 'tetr'):
+def grad_descent(frequencies, protocol, C_0, prepare_case = 'tetr', measure_case = 'tetr'):
     """
     performs gradient descent optimization
     
     method returns history of algorithm's steps
     """
 
-    C_0 = np.eye(4)/2. # 4 is square of dimension
+#     C_0 = np.array([[1,0,0,1],
+#                     [0,0,0,0],
+#                     [0,0,0,0],
+#                     [1,0,0,1]]) # identity channel
     C = [np.matrix(C_0)]
     
     mu = 3./(2*4)
     gamma = 0.3
+
+    current_prob = current_probability( C_0,
+                                            protocol = protocol,
+                                            prepare_case = prepare_case,
+                                            measure_case = measure_case)
+
+    grad_C_0 = grad_C = gradient( C_0,
+                           protocol = protocol,
+                           frequencies = frequencies,
+                           current_prob = current_prob,
+                           prepare_case = prepare_case, 
+                           measure_case = measure_case)
     
-    error = 1e-16 # eror of algorythm
-    for i in range(10000):
-        alpha = 1.
+    error = 1e-10 # eror of algorythm
+    for i in range(5000):
+        alpha = 2.
         current_prob = current_probability( C[i],
                                             protocol = protocol,
                                             prepare_case = prepare_case,
@@ -437,9 +452,9 @@ def grad_descent(frequencies, protocol, prepare_case = 'tetr', measure_case = 't
                               current_prob = current_prob,
                               prepare_case = prepare_case, 
                               measure_case = measure_case)
-#         print(C_current_cost)
+#         print('current_cost = ', C_current_cost)
         
-        B = np.real(C_current_cost + gamma * alpha * np.dot( D.reshape(1,-1), C[i].reshape(-1,1) ))
+        B = np.real(C_current_cost + gamma * alpha * np.dot( D.reshape(-1,1).T, grad_C.reshape(-1,1) ))
         
         next_prob = current_probability(C[i]+alpha*D,
                                         protocol = protocol,
@@ -451,25 +466,27 @@ def grad_descent(frequencies, protocol, prepare_case = 'tetr', measure_case = 't
                             current_prob = next_prob,
                             prepare_case=prepare_case, 
                             measure_case=measure_case)
-#         print(C_next_cost)
+#         print('next cost = ', C_next_cost)
         
         while C_next_cost > B:
             alpha = 0.5*alpha
-            B = C_current_cost + gamma * alpha * np.dot( D.reshape(-1,1).T, C[i].reshape(-1,1) )
+            B = np.real( C_current_cost + gamma * alpha * np.dot( D.reshape(-1,1).T, C[i].reshape(-1,1) ) )
             
             next_prob = current_probability(C[i] + alpha * D,
                                             protocol = protocol,
                                             prepare_case = prepare_case,
                                             measure_case = measure_case)
 
+
+
             C_next_cost = cost( C=(C[i]+alpha*D), 
                                 frequencies=frequencies,
                                 current_prob = next_prob,
                                 prepare_case=prepare_case, 
                                 measure_case=measure_case)
-        
+            
+#         print('alpha = ', alpha)
         C_new = CPTP_proj(C[i] + alpha * D) 
-#         print('i =',i,'\n',C_new)
         C.append(C_new)
 #         print(i)
 #         print(C_current_cost)
@@ -477,6 +494,13 @@ def grad_descent(frequencies, protocol, prepare_case = 'tetr', measure_case = 't
 #         print 'C_current_cost:', C_current_cost
 #         print 'C_next_cost:', C_next_cost
 #         print (np.abs(C_current_cost - C_next_cost))
+
+        # Stopping criteria
+        # crit = LA.norm(grad_C - grad_C_0)/LA.norm(grad_C_0)
+        # print(crit)
+        # if (crit < error) & (i > 5):
+        # print('i = ',i)
         if np.abs(C_current_cost - C_next_cost) < error:
+            print('End of algorithm. next_cost = ', C_next_cost)
             return C
     return C
