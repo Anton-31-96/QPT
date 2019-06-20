@@ -140,6 +140,11 @@ Tomography block
 """
 
 
+""" 
+Quantum State Tomography (SQS)
+"""
+
+
 def protocol_QST(case = 'tetr', n = 1):
     """
     returns matrix of state measurement protocol, where
@@ -180,6 +185,215 @@ def protocol_QST(case = 'tetr', n = 1):
              
     return np.array(np.matrix(S))
 
+
+
+def measurements_QST(protocol, rho, N = 1000, noise = 0):
+    """
+    returns frequency probabilies for measurements of state rho according to protocol E
+    E - (nd.array)
+    rho - state as expanded vector on Bloch sphere
+    N - number of measurements (int)
+    noise - level of noise while measurements (from 0 to 1)
+    """
+    if (noise > 1) or (noise < 0):
+        print("incorrect level of noise")
+        return False
+    p = protocol@rho
+    n = np.zeros(protocol.shape[0])
+    pos_outcomes = np.arange(protocol.shape[0])
+    
+    outcomes = np.random.choice(pos_outcomes, size = N, p = p)
+    
+    if noise > 0:
+        # level of noise
+        noise_pos = np.random.choice([0,1], p = [1-noise, noise], size=N)
+#         replace = np.random.choice(range(N), replace=False, size= int(N*noise) )
+        outcomes[np.where(noise_pos == 1)] = np.random.choice(pos_outcomes, size = np.sum(noise_pos))
+        
+    beta = 0.5
+    
+    for i in range(protocol.shape[0]):
+        ind = np.where(outcomes == pos_outcomes[i])
+        n[i] = (len(ind[0])+beta)/(N+2*beta)
+        
+    return n
+
+
+
+def gen_state(n = 1):
+    """
+    returns random state of n qubits
+    """
+    
+    def rand_qubit():
+        """
+        returns random state of single qubit
+        """
+        fi = np.random.uniform(0, 2*np.pi)
+        theta = np.arccos( np.random.uniform(-1., 1.) )
+        x = np.cos(fi) * np.sin(theta)
+        y = np.sin(fi) * np.sin(theta)
+        z = np.cos(theta)
+#         return np.array([1,0,0,1])
+        return np.array([1,x,y,z])
+        
+    state = rand_qubit()   
+    for i in range(n-1):
+        state = np.kron(state, rand_qubit())
+    
+    return state
+
+
+
+# def pauli_dot(vector):
+#     """
+#     Scalar product of matrices Pauli and vector (to return ro matrix representation)
+#     """ 
+#     # Pauli matrixes
+#     X = np.matrix([[0, 1], [1, 0]], dtype = complex)
+#     Y = np.matrix([[0, -1j], [1j, 0]], dtype = complex)
+#     Z = np.matrix([[1, 0], [0, -1]], dtype = complex)
+#     I2 = np.eye(2)
+#     s = np.array([I2,X,Y,Z])
+#     S = s
+    
+#     # define number of qubits:
+#     k = int(np.log2(np.sqrt(len(vector))))
+    
+#     for i in range(n-1):
+#         S =  np.kron(S,s)
+        
+#     rho = S[0]*vector[0]/(2**k)
+#     for i in range(1,len(S)):
+#         rho = rho + 0.5 * S[i] * vector[i]
+    
+#     return rho
+
+
+
+def check_physical(rho):
+    '''
+    Input: matrix rho
+    Output: matrix rho, modified to be physical
+    '''            
+    # Positive semi-definiteness
+    eigenvalues, s = LA.eigh(rho)
+
+    for i in range(eigenvalues.shape[0]):
+        value = eigenvalues[i]
+#         print(value)
+        if eigenvalues[i] < 0:
+            eigenvalues[i] = 0
+    rho_modified = np.matmul(np.matmul(s, np.diag(eigenvalues)), LA.inv(s))
+
+    
+    # Trace adjustment
+    tr = np.trace(rho_modified)
+    if tr > 1:
+        rho_modified = rho_modified/tr
+    return rho_modified
+
+
+
+def find_rho(E, b):
+    """
+    return rho_est via pseudo inverse matrix
+    """
+    S = np.matrix(E)
+    rho_vec_est = np.array((((S.H@S).I)@S.H)@b).reshape(-1)    
+    return rho_vec_est
+
+
+
+def operator_from_vec(vec):
+    vec = np.array(vec).reshape(-1)
+    X = np.matrix([[0, 1], [1, 0]], dtype = complex)
+    Y = np.matrix([[0, -1j], [1j, 0]], dtype = complex)
+    Z = np.matrix([[1, 0], [0, -1]], dtype = complex)
+    I2 = np.eye(2)
+    s = np.array([I2,X,Y,Z])
+    S = s
+
+    # define number of qubits:
+    k = int(np.log2(np.sqrt(len(vec))))
+    
+    for i in range(k-1):
+        S =  np.kron(S,s)
+        
+#     rho = S[0]*vector[0]/(2**k)
+    opert = np.zeros(S[0].shape)
+    for i in range(S.shape[0]):
+        opert = opert + S[i] * vec[i]
+    
+    return opert
+
+
+def gradient_QST(S, f, rho_vec, eps):
+    """
+    optimization of ML function via direct gradient descent method
+    """
+    rho = pauli_dot(rho_vec)
+    
+    def R(rho):
+        S0 = operator_from_vec(S[0])
+        p0 = np.trace(S0 @ rho)
+        r = S0 * f[0]/p0
+        for j in range(1,E.shape[0]):
+            Sj = operator_from_vec(S[j])
+            pj =  np.trace(Sj@rho)
+            r = r + (Sj * f[j]/pj)
+        return r
+    
+    def LLH(rho):
+        return np.trace(R(rho) @ rho)
+    
+    def rho_next(eps, Rk):
+        I = np.eye(rho.shape[0])
+        numer = (I+eps/2*(Rk - I)) @ rho @ (I+eps/2*(Rk+I))
+        denom = np.trace(numer)
+        return numer/denom
+
+    b = 1 # for setup of eps1, eps2
+    LLH_c = LLH(rho)
+    
+    conv_t = []
+    conv_hs = []
+    conv_if = []
+    zero_el = np.zeros((2,2))
+    
+    for k in range(1000):
+        Rk = R(rho)
+        eps_ar = np.array([0, np.random.rand(), np.random.rand()])*b
+        
+        LLH_1 = LLH(rho_next(eps_ar[1], Rk))
+        LLH_2 = LLH(rho_next(eps_ar[2], Rk))        
+        
+        eps_c = np.argmin([LLH_c, LLH_1, LLH_2])
+        
+        rho_n = rho_next(eps_c, Rk)
+        LLH_c = LLH(rho)
+        
+        # check if algorithm still are improoving current guess
+        if (tr_dist(Rk@rho,rho) + hs_dist(Rk@rho,rho) + if_dist(Rk@rho, rho)) < eps:
+            break
+        
+        if k>1:
+            conv_t.append(tr_dist(rho, rho_n))#/t_norm(rho, zero_el))
+            conv_hs.append(hs_dist(rho, rho_n))#/hs_norm(rho, zero_el))
+            conv_if.append(if_dist(rho, rho_n))#/if_norm(rho, zero_el))
+        
+        LLH_c = LLH(rho_n)
+        rho = rho_n
+        
+    
+    return rho, conv_t, conv_hs, conv_if
+
+
+
+
+"""
+Quantum Process Tomography (QPT)
+"""
 
 
 def protocol_QPT(prepare_case = 'tetr', measure_case = 'tetr'):
@@ -501,6 +715,8 @@ def grad_descent(frequencies, protocol, C_0, prepare_case = 'tetr', measure_case
         # if (crit < error) & (i > 5):
         # print('i = ',i)
         if np.abs(C_current_cost - C_next_cost) < error:
-            print('End of algorithm. next_cost = ', C_next_cost)
+            print('End of algorithm. cost = ', C_next_cost)
             return C
+    print('End of algorithm. Iteration number exceeded')
     return C
+
