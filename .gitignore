@@ -1,0 +1,8 @@
+# ignore .pdf files
+*.pdf
+*.png
+*.json
+/__pycache__
+/.vscode
+/.ipynb_checkpoints
+tomography_workspace.py
