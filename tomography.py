@@ -29,9 +29,17 @@ def pauli_dot(vector):
     """
     Scalar product of Pauli matrices and vector
     """ 
+    if len(vector) == 4:
+        # In case of extended vector
+        product = np.tensordot(PAULI_SET, vector, axes=(0,0))
 
-    return X_PAULI * vector[0] + Y_PAULI * vector[1] + Z_PAULI * vector[2]
-
+    elif len(vector) == 3:
+        # in case of usual Bloch vector
+        product = np.tensordot(PAULI_SET[1:], vector, axes=(0,0))
+    else:
+        print("the wrong dimensionality of vector")
+        return False
+    return product
 
 
 def prepare_states(case = "tetr"):
@@ -68,7 +76,19 @@ def bloch_to_dmat(vector):
     """
     returns density matrix corresponding to vector on Bloch sphere (2x2 case)
     """
-    return np.array(0.5*(np.eye(2) + pauli_dot(vector)))
+    if len(vector) == 4:
+        # in case of extended Bloch vector
+        dmat = 0.5 * np.array(pauli_dot(vector))
+
+    elif len(vector) == 3:
+        # in case of usual Bloch vector
+        dmat = np.array(0.5*(np.eye(2) + pauli_dot(vector)))
+
+    else:
+        print('The wrong dimensionality of the vector')
+        return False
+
+    return dmat 
 
 
 
@@ -151,8 +171,12 @@ def protocol_QST(case = 'tetr', n = 1):
        row - measurement operator
        column - operator's coefficients
 
-    case: 'tetr', 'axis'
-    n: number of qubits (int)
+    Args:
+        case: str
+            'tetr', 'axis'
+        n: number of qubits (int)
+    Returns:
+        protocol: np.matrix
     """
 
     assert(case == 'tetr' or case == 'axis'), \
@@ -182,14 +206,16 @@ def protocol_QST(case = 'tetr', n = 1):
         for i in range(n-1):
             S = np.kron(S, A)
         S = S/S.shape[0]
+
+    protocol = np.array(np.matrix(S))
              
-    return np.array(np.matrix(S))
+    return protocol
 
 
 
 def measurements_QST(protocol, rho, N = 1000, noise = 0):
     """
-    returns frequency probabilies for measurements of state rho according to protocol E
+    returns frequency probabilies for measurements of state rho according to protocol
     E - (nd.array)
     rho - state as expanded vector on Bloch sphere
     N - number of measurements (int)
@@ -198,7 +224,8 @@ def measurements_QST(protocol, rho, N = 1000, noise = 0):
     if (noise > 1) or (noise < 0):
         print("incorrect level of noise")
         return False
-    p = protocol@rho
+        
+    p = protocol @ rho
     n = np.zeros(protocol.shape[0])
     pos_outcomes = np.arange(protocol.shape[0])
     
@@ -288,7 +315,7 @@ def check_physical(rho):
 
     
     # Trace adjustment
-    tr = np.trace(rho_modified)
+    tr = np.trace(rho_modified @ rho_modified)
     if tr > 1:
         rho_modified = rho_modified/tr
     return rho_modified
@@ -300,7 +327,7 @@ def find_rho(E, b):
     return rho_est via pseudo inverse matrix
     """
     S = np.matrix(E)
-    rho_vec_est = np.array((((S.H@S).I)@S.H)@b).reshape(-1)    
+    rho_vec_est = np.array((((S.H @ S).I) @ S.H) @ b).reshape(-1)    
     return rho_vec_est
 
 
@@ -332,7 +359,7 @@ def gradient_QST(S, f, rho_vec, eps):
     """
     optimization of ML function via direct gradient descent method
     """
-    rho = pauli_dot(rho_vec)
+    rho = bloch_to_dmat(rho_vec)
     
     def R(rho):
         S0 = operator_from_vec(S[0])

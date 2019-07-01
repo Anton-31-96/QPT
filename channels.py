@@ -57,7 +57,7 @@ def channel_to_choi(channel):
 
 def pauli_dot(vector):
     """
-    Скалярное произведение матриц Паули и вектора vector
+    Scalar product of Pauli matrices and vector 
     """ 
     
     return X_PAULI * vector[0] + Y_PAULI * vector[1] + Z_PAULI * vector[2]
