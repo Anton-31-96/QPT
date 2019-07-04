@@ -173,13 +173,13 @@ def protocol_QST(case = 'tetr', n = 1):
 
     Args:
         case: str
-            'tetr', 'axis'
+            'tetr', 'axis', 'bell_expand'
         n: number of qubits (int)
     Returns:
         protocol: np.matrix
     """
 
-    assert(case == 'tetr' or case == 'axis'), \
+    assert(case == 'tetr' or case == 'axis' or case == 'bell_expand'), \
         "Wrong value of case. Use 'tetr' or 'axis' instead."
     
     if case == 'tetr':
@@ -206,7 +206,29 @@ def protocol_QST(case = 'tetr', n = 1):
         for i in range(n-1):
             S = np.kron(S, A)
         S = S/S.shape[0]
-
+    
+    elif case == 'bell_expand':
+        a1 = np.array([1, 1, 0, 0])
+        a2 = np.array([1, 0, 1, 0])
+        a3 = np.array([1, 0, 0, 1])
+        
+        a1_ = np.array([1, -1, 0, 0])
+        a2_ = np.array([1, 0, -1, 0])
+        a3_ = np.array([1, 0, 0, -1])
+        
+        sq = 1/np.sqrt(2)
+        b1 = np.array([1, -sq, -sq, 0])
+        b2 = np.array([1, -sq, sq, 0])
+        b3 = np.array([1, 0, 0, 1])
+        
+        b1_ = np.array([1, sq, sq, 0])
+        b2_ = np.array([1, sq, -sq, 0])
+        b3_ = np.array([1, 0, 0, -1])
+        A = np.array([a1, a1_, a2, a2_, a3, a3_])
+        B = np.array([b1, b1_, b2, b2_, b3, b3_])
+        S = np.kron(A, B)
+        S = S/S.shape[0]
+        
     protocol = np.array(np.matrix(S))
              
     return protocol
@@ -746,4 +768,3 @@ def grad_descent(frequencies, protocol, C_0, prepare_case = 'tetr', measure_case
             return C
     print('End of algorithm. Iteration number exceeded')
     return C
-

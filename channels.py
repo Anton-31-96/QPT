@@ -124,3 +124,4 @@ def gate_action(dmatrix, gate):
     
     elif gate == 'Z':
         return Z_PAULI @ dmatrix @ Z_PAULI
+        
