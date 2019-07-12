@@ -192,7 +192,7 @@ def protocol_QST(case = 'tetr', n = 1):
         S = A
         for i in range(n-1):
             S = np.kron(S,A)
-        S = S/S.shape[0]
+        S = S/S.shape[0]*2
     
     elif case == 'axis':
         x = np.array([1,1,0,0])
@@ -480,12 +480,12 @@ def protocol_QPT(prepare_case = 'tetr', measure_case = 'tetr'):
 
 
 
-def CP_proj(C):
+def CP_proj(channel):
     """
     returns projection of map C on the set of completely positive maps 
     """
-    C = C.reshape(4,4)
-    w, v = LA.eig(C)
+    channel = channel.reshape(4,4)
+    w, v = LA.eig(channel)
     v = np.matrix(v)
     for i in range(w.size):
         if w[i] < 0:
@@ -494,7 +494,7 @@ def CP_proj(C):
 
 
 
-def TP_proj(C):
+def TP_proj(channel):
     """
     returns projection of map C on the set of trace preserving maps
     """
@@ -508,20 +508,20 @@ def TP_proj(C):
         j = np.kron(np.eye(k), basis[i])
         M += np.kron(j,j)
     M = np.matrix(M)
-    C = C.reshape(-1, 1)
+    channel = channel.reshape(-1, 1)
     
-    C_tp = C - 1./k*M.H*M*C + 1./k*M.H*b
+    channel_tp = channel - 1./k * M.H * M * channel + 1./k * M.H * b
     
-    return C_tp #.reshape(k**2, k**2)
+    return channel_tp #.reshape(k**2, k**2)
 
 
 
-def CPTP_proj(C):
+def CPTP_proj(channel):
     """
     projection of map C on the set of Completely Positive and Trace Preserving maps
     """
-    shape = C.reshape(-1,1).shape
-    x = [np.matrix(C.reshape(-1,1))]
+    shape = channel.reshape(-1,1).shape
+    x = [np.matrix(channel.reshape(-1,1))]
     p = [np.matrix(np.zeros(shape))]
     q = [np.matrix(np.zeros(shape))]
     y = [np.matrix(np.zeros(shape))]
@@ -532,7 +532,7 @@ def CPTP_proj(C):
         q.append( y[i+1]+q[i]-x[i+1] )
         
         VOB = LA.norm(p[i] - p[i+1])**2 + LA.norm(q[i] - q[i+1])**2 \
-        + np.abs(2*p[i].H @ (x[i+1] - x[i])) + np.abs(2*p[i].H @ (y[i+1]-y[i]))
+            + np.abs(2*p[i].H @ (x[i+1] - x[i])) + np.abs(2*p[i].H @ (y[i+1]-y[i]))
         VOB = np.real(VOB)
         if VOB < 1e-4:
 #             print(VOB)
@@ -666,7 +666,7 @@ def gradient(C, protocol, frequencies, current_prob, prepare_case = 'tetr', meas
     return grad.reshape(4,4)
 
 
-def grad_descent(frequencies, protocol, C_0, prepare_case = 'tetr', measure_case = 'tetr'):
+def grad_descent(frequencies, protocol, C_0, prepare_case='tetr', measure_case='tetr'):
     """
     performs gradient descent optimization
     
@@ -682,47 +682,47 @@ def grad_descent(frequencies, protocol, C_0, prepare_case = 'tetr', measure_case
     mu = 3./(2*4)
     gamma = 0.3
 
-    current_prob = current_probability( C_0,
-                                            protocol = protocol,
-                                            prepare_case = prepare_case,
-                                            measure_case = measure_case)
+    current_prob = current_probability(C_0,
+                                       protocol=protocol,
+                                       prepare_case=prepare_case,
+                                       measure_case=measure_case)
 
-    grad_C_0 = grad_C = gradient( C_0,
-                           protocol = protocol,
-                           frequencies = frequencies,
-                           current_prob = current_prob,
-                           prepare_case = prepare_case, 
-                           measure_case = measure_case)
+    grad_C_0 = grad_C = gradient(C_0,
+                                 protocol=protocol,
+                                 frequencies=frequencies,
+                                 current_prob=current_prob,
+                                 prepare_case=prepare_case, 
+                                 measure_case=measure_case)
     
     error = 1e-10 # eror of algorythm
     for i in range(5000):
         alpha = 2.
-        current_prob = current_probability( C[i],
-                                            protocol = protocol,
-                                            prepare_case = prepare_case,
-                                            measure_case = measure_case)
-        grad_C = gradient( C[i],
-                           protocol = protocol,
-                           frequencies = frequencies,
-                           current_prob = current_prob,
-                           prepare_case = prepare_case, 
-                           measure_case = measure_case)
+        current_prob = current_probability(C[i],
+                                           protocol=protocol,
+                                           prepare_case=prepare_case,
+                                           measure_case=measure_case)
+        grad_C = gradient(C[i],
+                          protocol=protocol,
+                          frequencies=frequencies,
+                          current_prob=current_prob,
+                          prepare_case=prepare_case, 
+                          measure_case=measure_case)
 
         D = CPTP_proj(  C[i] - grad_C / mu ) - C[i]
         
         C_current_cost = cost(C=C[i], 
-                              frequencies = frequencies,
-                              current_prob = current_prob,
-                              prepare_case = prepare_case, 
-                              measure_case = measure_case)
+                              frequencies=frequencies,
+                              current_prob=current_prob,
+                              prepare_case=prepare_case, 
+                              measure_case=measure_case)
 #         print('current_cost = ', C_current_cost)
         
         B = np.real(C_current_cost + gamma * alpha * np.dot( D.reshape(-1,1).T, grad_C.reshape(-1,1) ))
         
         next_prob = current_probability(C[i]+alpha*D,
-                                        protocol = protocol,
-                                        prepare_case = prepare_case,
-                                        measure_case = measure_case)
+                                        protocol=protocol,
+                                        prepare_case=prepare_case,
+                                        measure_case=measure_case)
 
         C_next_cost = cost( C=(C[i] + alpha * D), 
                             frequencies=frequencies,
@@ -736,9 +736,9 @@ def grad_descent(frequencies, protocol, C_0, prepare_case = 'tetr', measure_case
             B = np.real( C_current_cost + gamma * alpha * np.dot( D.reshape(-1,1).T, C[i].reshape(-1,1) ) )
             
             next_prob = current_probability(C[i] + alpha * D,
-                                            protocol = protocol,
-                                            prepare_case = prepare_case,
-                                            measure_case = measure_case)
+                                            protocol=protocol,
+                                            prepare_case=prepare_case,
+                                            measure_case=measure_case)
 
 
 
